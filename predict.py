@@ -16,6 +16,9 @@ from utils.pose_utils import pnp
 
 
 def weighted_pts(pts_list, weight_num=10, std_inv=10):
+    """
+    这个函数的目的是通过对最近的 weight_num 个点云应用加权平均来平滑或融合多个点云数据。最近的点云数据会有更高的权重，而较旧的点云数据的影响会被减小。
+    """
     weights=np.exp(-(np.arange(weight_num)/std_inv)**2)[::-1] # wn
     pose_num=len(pts_list)
     if pose_num<weight_num:
@@ -65,7 +68,7 @@ def main(args):
         imsave(f'{str(output_dir)}/images_inter/{que_id}.jpg', visualize_intermediate_results(img, K, inter_results, estimator.ref_info, object_bbox_3d))
 
         hist_pts.append(pts)
-        pts_ = weighted_pts(hist_pts, weight_num=args.num, std_inv=args.std)
+        pts_ = weighted_pts(hist_pts, weight_num=args.num, std_inv=args.std) # 对box点云历史加权平均，得到smooth输出
         pose_ = pnp(object_bbox_3d, pts_, K)
         pts__, _ = project_points(object_bbox_3d, pose_, K)
         bbox_img_ = draw_bbox_3d(img, pts__, (0,0,255))
@@ -80,11 +83,11 @@ def main(args):
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--cfg', type=str, default='configs/gen6d_pretrain.yaml')
-    parser.add_argument('--database', type=str, default="custom/mouse")
-    parser.add_argument('--output', type=str, default="data/custom/mouse/test")
+    parser.add_argument('--database', type=str, default="custom/santa")
+    parser.add_argument('--output', type=str, default="data/custom/santa/test")
 
     # input video process
-    parser.add_argument('--video', type=str, default="data/custom/video/mouse-test.mp4")
+    parser.add_argument('--video', type=str, default="data/custom/video/santa-test2.mp4")
     parser.add_argument('--resolution', type=int, default=960)
     parser.add_argument('--transpose', action='store_true', dest='transpose', default=False)
 
@@ -92,6 +95,6 @@ if __name__=="__main__":
     parser.add_argument('--num', type=int, default=5)
     parser.add_argument('--std', type=float, default=2.5)
 
-    parser.add_argument('--ffmpeg', type=str, default='ffmpeg')
+    parser.add_argument('--ffmpeg', type=str, default='/home/junpeng.hu/anaconda3/envs/py39cu113/bin/ffmpeg')
     args = parser.parse_args()
     main(args)

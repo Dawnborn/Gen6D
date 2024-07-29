@@ -6,13 +6,14 @@ from utils.pose_utils import scale_rotation_difference_from_cameras, let_me_look
 
 
 def look_at_crop(img, K, pose, position, angle, scale, h, w):
+    # 让物体位于图片中间，让物体的上方向在图片上朝上，scale所有图片 # ref_img, ref_Ks[k], ref_poses[k], ref_cens[k], ref_vert_angle[k], ref_scales[k], size, size
     """rotate the image with "angle" and resize it with "scale", then crop the image on "position" with (h,w)"""
     # this function will return
     # 1) the resulted pose (pose_new) and intrinsic (K_new);
     # 2) pose_new = pose_compose(pose, pose_rect): "pose_rect" is the difference between the "pose_new" and the "pose"
     # 3) H is the homography that transform the "img" to "img_new"
-    R_new, f_new = let_me_look_at_2d(position, K)
-    R_z = np.asarray([[np.cos(angle), -np.sin(angle), 0], [np.sin(angle), np.cos(angle), 0], [0, 0, 1]], np.float32)
+    R_new, f_new = let_me_look_at_2d(position, K) #xy轴旋转
+    R_z = np.asarray([[np.cos(angle), -np.sin(angle), 0], [np.sin(angle), np.cos(angle), 0], [0, 0, 1]], np.float32) #z轴旋转
     R_new = R_z @ R_new
     f_new = f_new * scale
     K_new = np.asarray([[f_new, 0, w / 2], [0, f_new, h / 2], [0, 0, 1]], np.float32)
@@ -20,8 +21,8 @@ def look_at_crop(img, K, pose, position, angle, scale, h, w):
     H = K_new @ R_new @ np.linalg.inv(K)
     img_new = cv2.warpPerspective(img, H, (w, h), flags=cv2.INTER_LINEAR)
 
-    pose_rect = np.concatenate([R_new, np.zeros([3, 1])], 1).astype(np.float32)
-    pose_new = pose_compose(pose, pose_rect)
+    pose_rect = np.concatenate([R_new, np.zeros([3, 1])], 1).astype(np.float32) # c->c_rect
+    pose_new = pose_compose(pose, pose_rect) # 一方面让物体位于画面中心，一方面让物体摆正
     return img_new, K_new, pose_new, pose_rect, H
 
 def compute_normalized_view_correlation(que_poses,ref_poses, center, th=True):
@@ -54,18 +55,24 @@ def compute_normalized_view_correlation(que_poses,ref_poses, center, th=True):
 def normalize_reference_views(database, ref_ids, size, margin,
                               rectify_rot=True, input_pose=None, input_K=None,
                               add_rots=False, rots_list=None):
+    """
+    目的：
+        将图片统一转换为128*128且物体中心在图片中心，
+        且调整焦距使物体大小一致，
+        且世界坐标系的上在图片也朝上，
+    """
     object_center = get_object_center(database)
-    object_diameter = get_diameter(database)
+    object_diameter = get_diameter(database) # GenMOP:2.0
 
-    ref_poses = np.asarray([database.get_pose(ref_id) for ref_id in ref_ids]) # rfn,3,3
+    ref_poses = np.asarray([database.get_pose(ref_id) for ref_id in ref_ids]) # rfn,3,4 相机坐标系下世界原点的位姿
     ref_Ks = np.asarray([database.get_K(ref_id) for ref_id in ref_ids]) # rfn,3,3
-    ref_cens = np.asarray([project_points(object_center[None],pose, K)[0][0] for pose,K in zip(ref_poses, ref_Ks)]) # rfn,2
-    ref_cams = np.stack([pose_inverse(pose)[:,3] for pose in ref_poses], 0) # rfn, 3
+    ref_cens = np.asarray([project_points(object_center[None],pose, K)[0][0] for pose,K in zip(ref_poses, ref_Ks)]) # rfn,2 物体中心在ref图片上的投影
+    ref_cams = np.stack([pose_inverse(pose)[:,3] for pose in ref_poses], 0) # rfn, 3, -R^t * T，得到世界坐标系下相机的位置
 
-    # ensure that the output reference images have the same scale
-    ref_dist = np.linalg.norm(ref_cams - object_center[None,], 2, 1) # rfn
-    ref_focal_look = np.asarray([let_me_look_at(pose, K, object_center)[1] for pose, K in zip(ref_poses, ref_Ks)]) # rfn
-    ref_focal_new = size * (1 - margin) / object_diameter * ref_dist
+    # ensure that the output reference images have the same scale 即物体在图片上大小一致
+    ref_dist = np.linalg.norm(ref_cams - object_center[None,], 2, 1) # rfn 相机与物体中心的距离
+    ref_focal_look = np.asarray([let_me_look_at(pose, K, object_center)[1] for pose, K in zip(ref_poses, ref_Ks)]) # rfn 计算如果物体中心与相机中心重合相机的焦距应该是多少
+    ref_focal_new = size * (1 - margin) / object_diameter * ref_dist # 相似三角形，调整相机的焦距，以确保物体在图像中的大小一致。margin0.05
     ref_scales = ref_focal_new / ref_focal_look
 
     # ref_vert_angle will rotate the reference image to ensure the "up" direction approximate the Y- of the image
@@ -78,10 +85,10 @@ def normalize_reference_views(database, ref_ids, size, margin,
             _, ref_vert_angle = scale_rotation_difference_from_cameras(ref_poses, input_pose, ref_Ks, input_K, object_center)  # rfn
         else:
             object_vert = get_object_vert(database)
-            ref_vert_2d = np.asarray([(pose[:,:3] @ object_vert)[:2] for pose in ref_poses])
+            ref_vert_2d = np.asarray([(pose[:,:3] @ object_vert)[:2] for pose in ref_poses]) # 相机坐标系下物体中心的位置xy
             mask = np.linalg.norm(ref_vert_2d,2,1)<1e-5
             ref_vert_2d[mask] += 1e-5 * np.sign(ref_vert_2d[mask]) # avoid 0 vector
-            ref_vert_angle = -np.arctan2(ref_vert_2d[:,1],ref_vert_2d[:,0])-np.pi/2
+            ref_vert_angle = -np.arctan2(ref_vert_2d[:,1],ref_vert_2d[:,0])-np.pi/2 #旋转使得物体的up vector在图片上的投影竖直朝上
     else:
         ref_vert_angle = np.zeros(len(ref_ids),np.float32)
 
@@ -110,6 +117,7 @@ def normalize_reference_views(database, ref_ids, size, margin,
     return ref_imgs_new, ref_masks_new, ref_Ks_new, ref_poses_new, ref_Hs
 
 def select_reference_img_ids_fps(database, ref_ids_all, ref_num, random_fps=False):
+    # 计算相机位置，并以物体中心坐标为原点
     object_center = get_object_center(database)
     # select ref ids
     poses = [database.get_pose(ref_id) for ref_id in ref_ids_all]

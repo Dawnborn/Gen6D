@@ -438,7 +438,7 @@ def read_model(path, ext=""):
         images = read_images_text(os.path.join(path, "images" + ext))
         points3D = read_points3D_text(os.path.join(path, "points3D") + ext)
     else:
-        cameras = read_cameras_binary(os.path.join(path, "cameras" + ext))
+        cameras = read_cameras_binary(os.path.join(path, "cameras" + ext)) # Camera(id=1, model='SIMPLE_RADIAL', width=540, height=960, params=array([8.91902039e+02, 2.70000000e+02, 4.80000000e+02, 4.05480387e-03]))
         images = read_images_binary(os.path.join(path, "images" + ext))
         points3D = read_points3D_binary(os.path.join(path, "points3D") + ext)
     return cameras, images, points3D

@@ -82,8 +82,8 @@ if __name__=="__main__":
     parser.add_argument('--transpose', action='store_true', dest='transpose', default=False)
 
     # for sfm
-    parser.add_argument('--database_name', type=str, default='example/mouse')
-    parser.add_argument('--colmap_path', type=str, default='colmap')
+    parser.add_argument('--database_name', type=str, default='custom/mouse')
+    parser.add_argument('--colmap_path', type=str, default='/home/junpeng.hu/anaconda3/envs/py39cu113/bin/colmap')
     # for sfm
     parser.add_argument('--que_database', type=str, default='linemod/cat')
     parser.add_argument('--que_split', type=str, default='linemod_test')

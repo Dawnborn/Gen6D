@@ -137,21 +137,22 @@ class Gen6DEstimator:
     #     import ipdb; ipdb.set_trace()
 
     def build(self, database: BaseDatabase, split_type: str):
-        object_center = get_object_center(database)
-        object_vert = get_object_vert(database)
-        ref_ids_all, _ = get_database_split(database, split_type)
+        object_center = get_object_center(database) # array([-0.55545802, -0.57370092, -7.58323596]) object点云的中心
+        object_vert = get_object_vert(database) # array([0., 0., 1.], dtype=float32) 硬编码，物体朝向？？
+        ref_ids_all, _ = get_database_split(database, split_type) # (['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', ...], ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', ...])
 
         # use fps to select reference images for detection and selection
-        ref_ids = select_reference_img_ids_fps(database, ref_ids_all, self.cfg['ref_view_num'])
+        ref_ids = select_reference_img_ids_fps(database, ref_ids_all, self.cfg['ref_view_num']) # 根据相机的location最远点采样选择reference frame
         ref_imgs, ref_masks, ref_Ks, ref_poses, ref_Hs = \
             normalize_reference_views(database, ref_ids, self.cfg['ref_resolution'], 0.05)
 
-        # in-plane rotation for viewpoint selection
+        # in-plane rotation for viewpoint selection 统一对所有的参考帧按照几个预定义的角度旋转，得到ref_imgs_rots
         rfn, h, w, _ = ref_imgs.shape
         ref_imgs_rots = []
         angles = [-np.pi/2, -np.pi/4, 0, np.pi/4, np.pi/2]
         for angle in angles:
-            M = transformation_offset_2d(-w/2,-h/2)
+            # 生成一系列2d的变换,不涉及z轴
+            M = transformation_offset_2d(-w/2,-h/2) # array([[  1.,   0., -64.], [  0.,   1., -64.]], dtype=float32)
             M = transformation_compose_2d(M, transformation_rotation_2d(angle))
             M = transformation_compose_2d(M, transformation_offset_2d(w/2,h/2))
             H_ = np.identity(3).astype(np.float32)
@@ -174,7 +175,7 @@ class Gen6DEstimator:
         inter_results={}
 
         if pose_init is None:
-            # stage 1: detection
+            # stage 1: detection 2d position and scale
             with torch.no_grad():
                 detection_outputs = self.detector.detect_que_imgs(que_img[None])
                 position = detection_outputs['positions'][0]
@@ -182,26 +183,26 @@ class Gen6DEstimator:
 
             # crop the image according to the detected scale and the detected position
             que_img_, _ = transformation_crop(que_img, position, 1/scale_r2q, 0, self.cfg['ref_resolution'])  # h,w,3
-            inter_results['det_position'] = position
-            inter_results['det_scale_r2q'] = scale_r2q
-            inter_results['det_que_img'] = que_img_
+            inter_results['det_position'] = position # 1,2
+            inter_results['det_scale_r2q'] = scale_r2q # single value
+            inter_results['det_que_img'] = que_img_ # 
 
             # stage 2: viewpoint selection
             with torch.no_grad():
-                selection_results = self.selector.select_que_imgs(que_img_[None])
+                selection_results = self.selector.select_que_imgs(que_img_[None]) # (1, 128, 128, 3)
 
             ref_idx = selection_results['ref_idx'][0]
-            angle_r2q = selection_results['angles'][0]
+            angle_r2q = selection_results['angles'][0] # angle_ref2que
             scores = selection_results['scores'][0]
 
             inter_results['sel_angle_r2q'] = angle_r2q
             inter_results['sel_scores'] = scores
             inter_results['sel_ref_idx'] = ref_idx
 
-            # stage 3: solve for pose from detection/selected viewpoint/in-plane rotation
+            # stage 3: solve for pose from detection/selected viewpoint/in-plane rotation camera to world coordinate
             ref_pose = self.ref_info['poses'][ref_idx]
             ref_K = self.ref_info['Ks'][ref_idx]
-            pose_pr = estimate_pose_from_similarity_transform_compose(
+            pose_pr = estimate_pose_from_similarity_transform_compose( # 根据最接近的ref图片的内外参以及回归得到的ref2que的scale和angle计算que位置的初始位姿
                 position, scale_r2q, angle_r2q, ref_pose, ref_K, que_K, self.ref_info['center'])
         else:
             pose_pr = pose_init

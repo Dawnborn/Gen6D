@@ -274,9 +274,10 @@ class VolumeRefiner(nn.Module):
 
     def refine_que_imgs(self, que_img, que_K, in_pose, size=128, ref_num=6, ref_even=False):
         """
+        (que_img, que_K, pose_pr, size=128, ref_num=6, ref_even=True)
         @param que_img:  [h,w,3]
         @param que_K:    [3,3]
-        @param in_pose:  [3,4]
+        @param in_pose:  [3,4] world to camera
         @param size:     int
         @param ref_num:  int
         @param ref_even: bool
@@ -285,13 +286,13 @@ class VolumeRefiner(nn.Module):
         margin = 0.05
         ref_even_num = min(128,len(self.ref_ids))
 
-        # normalize database and input pose
-        ref_database = NormalizedDatabase(self.ref_database) # wrapper: object is in the unit sphere at origin
-        in_pose = normalize_pose(in_pose, ref_database.scale, ref_database.offset)
+        # normalize database and input pose 
+        ref_database = NormalizedDatabase(self.ref_database) # wrapper: object is in the unit sphere at origin 通过scale和offset使得点云移动至中心
+        in_pose = normalize_pose(in_pose, ref_database.scale, ref_database.offset) # scale和offset作用在pose上（此时依然为world2camera)
         object_center = get_object_center(ref_database)
         object_diameter = get_diameter(ref_database)
 
-        # warp the query image to look at the object w.r.t input pose
+        # warp the query image to look at the object w.r.t input pose # 让query image看向物体中心并裁减图片
         _, new_f = let_me_look_at(in_pose, que_K, object_center)
         in_dist = np.linalg.norm(pose_inverse(in_pose)[:,3] - object_center)
         in_f = size * (1 - margin) / object_diameter * in_dist

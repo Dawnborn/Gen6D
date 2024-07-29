@@ -16,7 +16,7 @@ def estimate_pose_from_similarity_transform(ref_pose, ref_K, que_K, M_que_to_ref
     ref_obj_center, _ = project_points(object_center[None,:],ref_pose,ref_K)
     # ref_obj_center = ref_obj_center[0]
     que_obj_center = transformation_apply_2d(M_ref_to_que, ref_obj_center)[0]
-    que_obj_center_ = hpts_to_pts(pts_to_hpts(que_obj_center[None]) @ np.linalg.inv(que_K).T)[0]  # normalized
+    que_obj_center_ = hpts_to_pts(pts_to_hpts(que_obj_center[None]) @ np.linalg.inv(que_K).T)[0]  # normalized #(z轴为1)
     scale, rotation, _ = transformation_decompose_2d(M_ref_to_que)
 
     # approximate depth
@@ -54,7 +54,7 @@ def let_me_look_at_2d(image_center, K):
     image_center = image_center - K[:2, 2]
     f_new = np.sqrt(np.linalg.norm(image_center, 2, 0) ** 2 + f_raw ** 2)
     image_center_ = image_center / f_raw
-    R_new = look_at_rotation(image_center_)
+    R_new = look_at_rotation(image_center_) #仅涉及xy轴方向的旋转
     return R_new, f_new
 
 def scale_rotation_difference_from_cameras(ref_poses, que_poses, ref_Ks, que_Ks, center):

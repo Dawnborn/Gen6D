@@ -242,8 +242,8 @@ class Detector(BaseDetector):
             qn, _, rfn, hcs, wcs = scores_cur.shape
             scores.append(F.interpolate(scores_cur.reshape(qn,3*rfn,hcs,wcs),size=(hs,ws),mode='bilinear').reshape(qn,3,rfn,hs,ws))
 
-        scores = torch.cat(scores, 1) # qn,sn*3,rfn,hq/8,wq/8
-        scores = self.score_conv(scores)
+        scores = torch.cat(scores, 1) # qn,sn*3,rfn,hq/8,wq/8 torch.Size([1, 12, 32, 120, 67])
+        scores = self.score_conv(scores) # torch.Size([1, 64, 32, 120, 67])
         scores_feats = torch.max(scores,2)[0] # qn,f,hq/8,wq/8
         scores = self.score_predict(scores_feats) # qn,1,hq/8,wq/8
 

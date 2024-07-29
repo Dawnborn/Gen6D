@@ -166,17 +166,18 @@ class ViewpointSelector(nn.Module):
         """
         @param que_imgs: [qn,h,w,3]
         @return:
+        根据que视角和ref视角的相似度计算各个视角下的分数，
         """
         que_imgs = torch.from_numpy(color_map_forward(que_imgs).transpose([0, 3, 1, 2])).cuda()  # qn,3,h,w
-        logits, angles = self.compute_view_point_feats(que_imgs) # qn,rfn
-        ref_idx = torch.argmax(logits,1) # qn,
+        logits, angles = self.compute_view_point_feats(que_imgs) # qn,rfn torch.Size([1, 59]), torch.Size([1, 59])
+        ref_idx = torch.argmax(logits,1) # qn, 
         angles = angles[torch.arange(ref_idx.shape[0]), ref_idx] # qn,
         # qn, qn, [qn,rfn]
         return {'ref_idx': ref_idx.cpu().numpy(), 'angles': angles.cpu().numpy(), 'scores': logits.cpu().numpy()}
 
     def compute_view_point_feats(self, que_imgs):
-        que_feats_list = self.get_feats(que_imgs) # qn,f,h,w
-        ref_feats_list = self.ref_feats_cache # an,rfn,f,h,w
+        que_feats_list = self.get_feats(que_imgs) # qn,f,h,w # 1 torch.Size([1, 512, 16, 16])
+        ref_feats_list = self.ref_feats_cache # an,rfn,f,h,w # list of 3 torch.Size([5, 59, 512, 16, 16])
 
         vps_feats, corr_feats = [], []
         for ref_feats, que_feats, corr_conv in zip(ref_feats_list, que_feats_list, self.corr_conv_list):
@@ -195,13 +196,14 @@ class ViewpointSelector(nn.Module):
             vps_feats.append(score_vps.reshape(qn,rfn,an))
 
         corr_feats = torch.cat(corr_feats, 1)  # qn,f_*3,rfn,an,h_,w_
-        qn, f, rfn, an, h, w = corr_feats.shape
+        qn, f, rfn, an, h, w = corr_feats.shape # torch.Size([1, 768, 59, 5, 4, 4])
         corr_feats = self.corr_feats_conv(corr_feats.reshape(qn, f, rfn*an, h, w))[...,0,0] # qn,f,rfn,an
         corr_feats = corr_feats.reshape(qn,corr_feats.shape[1],rfn,an)
         vps_feats = self.vp_norm(torch.stack(vps_feats, 1),) # qn,3,rfn,an
-        feats = torch.cat([corr_feats, vps_feats],1) # qn,f+3,rfn,an
+        feats = torch.cat([corr_feats, vps_feats],1) # qn,f+3,rfn,an # torch.Size([1, 515, 59, 5])
 
-        scores_feats = torch.max(self.score_process(feats),3)[0] # qn,512,rfn
+        tmp = self.score_process(feats) # torch.Size([1, 512, 59, 5])
+        scores_feats = torch.max(tmp,3)[0] # qn,512,rfn
         scores_feats = scores_feats + self.ref_pose_embed.T.unsqueeze(0) # qn,512,rfn
 
         for att, mlp in zip(self.atts, self.mlps):

@@ -98,8 +98,8 @@ def main(args):
     else:
         raise NotImplementedError
 
-    ref_database = parse_database_name(ref_database_name)
-    estimator = name2estimator[cfg['type']](cfg)
+    ref_database = parse_database_name(ref_database_name) # GenMOPDatabase 'genmop/tformer-ref' 
+    estimator = name2estimator[cfg['type']](cfg) # <class 'estimator.Gen6DEstimator'>(cfg)
     ref_split = que_split if args.split_type is None else args.split_type
     estimator.build(ref_database, split_type=ref_split)
 
@@ -115,7 +115,7 @@ def main(args):
     Path(f'data/eval/poses/{object_name}').mkdir(exist_ok=True,parents=True)
     Path(f'data/vis_inter/{est_name}/{object_name}').mkdir(exist_ok=True,parents=True)
     Path(f'data/vis_final/{est_name}/{object_name}').mkdir(exist_ok=True,parents=True)
-    if not args.eval_only:
+    if not args.eval_only: # zhixing
         pose_pr_list = []
 
         for que_id in tqdm(que_ids):
@@ -153,8 +153,9 @@ def main(args):
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--cfg', type=str, required=True)
-    parser.add_argument('--object_name', type=str, default='warrior')
+    parser.add_argument('--cfg', type=str, default="configs/gen6d_pretrain.yaml")
+    # parser.add_argument('--object_name', type=str, default='genmop/tformer')
+    parser.add_argument('--object_name', type=str, default='genmop/scissors')
     parser.add_argument('--eval_only', action='store_true', dest='eval_only', default=False)
     parser.add_argument('--symmetric', action='store_true', dest='symmetric', default=False)
     parser.add_argument('--split_type', type=str, default=None)

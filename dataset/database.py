@@ -6,6 +6,8 @@ import cv2
 import numpy as np
 import os
 
+import open3d as o3d
+
 import plyfile
 from PIL import Image
 from skimage.io import imread, imsave
@@ -13,6 +15,27 @@ from skimage.io import imread, imsave
 from utils.base_utils import read_pickle, save_pickle, pose_compose, load_point_cloud, pose_inverse, resize_img, \
     mask_depth_to_pts, transform_points_pose
 from utils.read_write_model import read_model
+
+def visualize_point_cloud(points, colors=None):
+    """
+    可视化点云数据和世界坐标系.
+
+    参数:
+    points (numpy.ndarray): 点云数据，每行表示一个点的 (x, y, z) 坐标.
+    colors (numpy.ndarray): 点的颜色，每行表示一个点的 (r, g, b) 值 (可选).
+    """
+    # 创建 open3d 点云对象
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points)
+    
+    if colors is not None:
+        pcd.colors = o3d.utility.Vector3dVector(colors)
+
+    # 创建坐标系
+    axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1, origin=[0, 0, 0])
+
+    # 可视化
+    o3d.visualization.draw_geometries([pcd, axis])
 
 SUN_IMAGE_ROOT = 'data/SUN2012pascalformat/JPEGImages'
 SUN_IMAGE_ROOT_128 = 'data/SUN2012pascalformat/JPEGImages_128'
@@ -51,7 +74,7 @@ class BaseDatabase(abc.ABC):
         # dummy mask
         img = self.get_image(img_id)
         h, w = img.shape[:2]
-        return np.ones([h,w],np.bool)
+        return np.ones([h,w],bool)
 
 LINEMOD_ROOT='data/LINEMOD'
 class LINEMODDatabase(BaseDatabase):
@@ -125,17 +148,21 @@ class GenMOPMetaInfoWrapper:
         self.forward = genmop_meta_info[self.object_name]['forward']
         self.object_point_cloud = load_point_cloud(f'{GenMOP_ROOT}/{self.object_name}-ref/object_point_cloud.ply')
 
-        # rotate
-        self.rotation = self.compute_rotation(self.gravity, self.forward)
-        self.object_point_cloud = (self.object_point_cloud @ self.rotation.T)
+        visualize_point_cloud(self.object_point_cloud)
+
+        # rotate 初始点云的坐标系定义方式无意义，将点云变换至根据forward和gravity定义的坐标系下
+        self.rotation = self.compute_rotation(self.gravity, self.forward) # 输入(array([-0.0734401, -0.633415 , -0.77032  ]), array([-0.121561, -0.249061,  0.211048], dtype=float32))，得到一个重力朝向z轴的坐标系
+        self.object_point_cloud = (self.object_point_cloud @ self.rotation.T) # 点云(N,3) 此处相当于左乘，单纯的坐标系变换
+
+        visualize_point_cloud(self.object_point_cloud)
 
         # scale
-        self.scale_ratio = self.compute_normalized_ratio(self.object_point_cloud)
+        self.scale_ratio = self.compute_normalized_ratio(self.object_point_cloud) # 点云x方向尺度scale放缩到2
         self.object_point_cloud = self.object_point_cloud * self.scale_ratio
 
         min_pt = np.min(self.object_point_cloud,0)
         max_pt = np.max(self.object_point_cloud,0)
-        self.center = (max_pt + min_pt)/2
+        self.center = (max_pt + min_pt)/2 # 分别找到xyz中的最大值和最小值求中心
 
         test_fn = f'{GenMOP_ROOT}/{self.object_name}-ref/test-object_point_cloud.ply'
         if Path(test_fn).exists():
@@ -152,12 +179,12 @@ class GenMOPMetaInfoWrapper:
     def normalize_pose(self, pose):
         R = pose[:3,:3]
         t = pose[:3,3:]
-        R = R @ self.rotation.T
+        R = R @ self.rotation.T # 此处R为世界到相机，所以rotation为右乘转置
         t = self.scale_ratio * t
         return np.concatenate([R,t], 1).astype(np.float32)
 
     @staticmethod
-    def compute_rotation(vert, forward):
+    def compute_rotation(vert, forward): # gravity, forward
         y = np.cross(vert, forward)
         x = np.cross(y, vert)
 
@@ -262,7 +289,10 @@ class CustomDatabase(BaseDatabase):
             self.object_point_cloud = load_point_cloud(f'{self.root}/object_point_cloud.ply')
             # rotate
             self.rotation = GenMOPMetaInfoWrapper.compute_rotation(z, x)
+
+            # visualize_point_cloud(self.object_point_cloud) 原始坐标
             self.object_point_cloud = (self.object_point_cloud @ self.rotation.T)
+            # visualize_point_cloud(self.object_point_cloud) # z轴朝上
 
             # scale
             self.scale_ratio = GenMOPMetaInfoWrapper.compute_normalized_ratio(self.object_point_cloud)

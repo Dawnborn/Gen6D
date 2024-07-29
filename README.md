@@ -183,3 +183,6 @@ We provide a paper list about recent generalizable 6-DoF object pose estimators 
   year={2022}
 }
 ```
+
+
+python3 eval.py --cfg configs/gen6d_pretrain.yaml --object_name genmop/tformer

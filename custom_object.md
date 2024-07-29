@@ -67,7 +67,7 @@ In the following, we will generate reference images for a `mouse` object and pre
                      --resolution 960 \
                      --transpose \
                      --output data/custom/mouse/test \
-                     --ffmpeg <path-to-ffmpeg-exe>
+                     --ffmpeg /home/junpeng.hu/anaconda3/envs/py39cu113/bin/ffmpeg
    ```
    You will see the video at `data/custom/mouse/test/video.mp4`.
 8. (Optionally) You may directly download the reference images processed by me at [here](https://connecthkuhk-my.sharepoint.com/:f:/g/personal/yuanly_connect_hku_hk/EkWESLayIVdEov4YlVrRShQBkOVTJwgK0bjF7chFg2GrBg?e=Y8UpXu) (mouse_processed.tar.gz) and organize files like
