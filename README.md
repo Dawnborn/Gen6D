@@ -184,5 +184,25 @@ We provide a paper list about recent generalizable 6-DoF object pose estimators 
 }
 ```
 
+<!-- # Install
+
+source prep.sh
+
+pip install torch==2.1.0 torchvision==0.16.0 --index-url https://download.pytorch.org/whl/cu118
+
+git clone https://github.com/facebookresearch/pytorch3d.git
+cd pytorch3d && pip install -e .
+
+test failed
+
+try to use prebuilt binary
+
+conda create -n py310cu113 python=3.10
+
+pip install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio==0.11.0 --extra-index-url https://download.pytorch.org/whl/cu113
+
+# Install 2 -->
+
+
 
 python3 eval.py --cfg configs/gen6d_pretrain.yaml --object_name genmop/tformer

@@ -58,10 +58,10 @@ def main(args):
 
         if pose_init is not None:
             estimator.cfg['refine_iter'] = 1 # we only refine one time after initialization
-        pose_pr, inter_results = estimator.predict(img, K, pose_init=pose_init)
+        pose_pr, inter_results = estimator.predict(img, K, pose_init=pose_init) # 输出为当前相机位姿，世界到相机（在当前虚假K下，尺度为scale后的物体点云的尺度）
         pose_init = pose_pr
 
-        pts, _ = project_points(object_bbox_3d, pose_pr, K)
+        pts, _ = project_points(object_bbox_3d, pose_pr, K) # 世界(点云文件)坐标系下的bbox，pose_pr: 世界到相机
         bbox_img = draw_bbox_3d(img, pts, (0,0,255))
         imsave(f'{str(output_dir)}/images_out/{que_id}-bbox.jpg', bbox_img)
         np.save(f'{str(output_dir)}/images_out/{que_id}-pose.npy', pose_pr)
@@ -84,7 +84,7 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--cfg', type=str, default='configs/gen6d_pretrain.yaml')
     parser.add_argument('--database', type=str, default="custom/santa")
-    parser.add_argument('--output', type=str, default="data/custom/santa/test")
+    parser.add_argument('--output', type=str, default="data/custom/santa/test22")
 
     # input video process
     parser.add_argument('--video', type=str, default="data/custom/video/santa-test2.mp4")

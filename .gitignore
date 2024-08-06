@@ -1,3 +1,6 @@
 data
 **/__pycache__
 .idea
+**.tar.gz
+**.db
+single_image

@@ -290,16 +290,16 @@ class CustomDatabase(BaseDatabase):
             # rotate
             self.rotation = GenMOPMetaInfoWrapper.compute_rotation(z, x)
 
-            # visualize_point_cloud(self.object_point_cloud) 原始坐标
+            # visualize_point_cloud(self.object_point_cloud) # 原始坐标
             self.object_point_cloud = (self.object_point_cloud @ self.rotation.T)
-            # visualize_point_cloud(self.object_point_cloud) # z轴朝上
+            # visualize_point_cloud(self.object_point_cloud) # z轴朝向物体上方 x轴朝向物体前方
 
             # scale
             self.scale_ratio = GenMOPMetaInfoWrapper.compute_normalized_ratio(self.object_point_cloud)
             self.object_point_cloud = self.object_point_cloud * self.scale_ratio
 
-            min_pt = np.min(self.object_point_cloud, 0)
-            max_pt = np.max(self.object_point_cloud, 0)
+            min_pt = np.min(self.object_point_cloud, 0) # 每个维度上的最小值
+            max_pt = np.max(self.object_point_cloud, 0) # 每个维度上的最大值
             self.center = (max_pt + min_pt) / 2
 
             # modify poses
