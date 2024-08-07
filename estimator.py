@@ -10,6 +10,7 @@ from utils.base_utils import load_cfg, transformation_offset_2d, transformation_
 from utils.database_utils import select_reference_img_ids_fps, normalize_reference_views
 from utils.pose_utils import estimate_pose_from_similarity_transform_compose
 
+import matplotlib.pyplot as plt
 
 def compute_similarity_transform(pts0, pts1):
     """
@@ -171,15 +172,33 @@ class Gen6DEstimator:
         if self.refiner is not None:
             self.refiner.load_ref_imgs(database, ref_ids_all)
 
-    def predict(self, que_img, que_K, pose_init=None):
+    def predict(self, que_img, que_K, pose_init=None, bbox=None):
+        """
+        bbox: (top_left_x, top_left_y, w, h)
+            only square bounding box supported
+            x y follow cv2 convention, top left corner of the image is (0,0), bottom right corner of the image is (w,h)
+        """
         inter_results={}
+
+        plt.imsave("que_img.png", que_img)
 
         if pose_init is None:
             # stage 1: detection 2d position and scale
-            with torch.no_grad():
-                detection_outputs = self.detector.detect_que_imgs(que_img[None])
-                position = detection_outputs['positions'][0]
-                scale_r2q = detection_outputs['scales'][0]
+            if bbox is None:
+                with torch.no_grad():
+                    detection_outputs = self.detector.detect_que_imgs(que_img[None])
+                    plt.imsave("que_img.png",que_img)
+                    position = detection_outputs['positions'][0] # left top of the bounding box # array([490.20837, 252.5261 ], dtype=float32)
+                    scale_r2q = detection_outputs['scales'][0] # height or width of the square bounding box / image_size 1.7245612
+            else:
+                x,y,w,h = bbox
+                img_size = max(que_img.shape)
+                position = np.array([x,y])
+                scale_r2q = img_size/max(w,h)
+                # # gt for ceshitu.png
+                # position[0] = 320
+                # position[1] = 150
+                # scale_r2q = 640./270.
 
             # crop the image according to the detected scale and the detected position
             que_img_, _ = transformation_crop(que_img, position, 1/scale_r2q, 0, self.cfg['ref_resolution'])  # h,w,3

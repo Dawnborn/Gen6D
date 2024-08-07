@@ -53,20 +53,25 @@ class EstimatorInterface:
         self.object_pts = get_ref_point_cloud(self.ref_database)
         self.object_bbox_3d = pts_range_to_bbox_pts(np.max(self.object_pts,0), np.min(self.object_pts,0))
     
-    def predict(self, img_path):
+    def predict(self, img_path, bbox=None):
+        """
+        """
         img = imread(img_path)
-        img = prepare_image(img, self.image_size, self.transpose)
+        img = prepare_image(img, self.image_size, self.transpose) # -> h,w,3(rgb) 0-255
         h, w, _ = img.shape
         f=np.sqrt(h**2+w**2)
         K = np.asarray([[f,0,w/2],[0,f,h/2],[0,0,1]],np.float32)
 
          # we only refine one time after initialization
-        pose_pr, inter_results = self.estimator.predict(img, K, pose_init=None) # 输出为当前相机位姿，世界到相机（在当前虚假K下，尺度为scale后的物体点云的尺度）
+        pose_pr, inter_results = self.estimator.predict(img, K, pose_init=None,bbox=bbox) # 输出为当前相机位姿，世界到相机（在当前虚假K下，尺度为scale后的物体点云的尺度）
 
         pts, _ = project_points(self.object_bbox_3d, pose_pr, K) # 世界(点云文件)坐标系下的bbox，pose_pr: 世界到相机
-        bbox_img = draw_bbox_3d(img, pts, (0,0,255))
-        imsave(f'{str(self.output_dir)}/bbox.jpg', bbox_img)
-        np.save(f'{str(self.output_dir)}/pose.npy', pose_pr)
+        
+        if self.output_dir:
+            bbox_img = draw_bbox_3d(img, pts, (0,0,255))
+            imsave(f'{str(self.output_dir)}/bbox.jpg', bbox_img)
+            np.save(f'{str(self.output_dir)}/pose.npy', pose_pr)
+            imsave(f'{str(self.output_dir)}/inter.jpg', visualize_intermediate_results(img, K, inter_results, self.estimator.ref_info, self.object_bbox_3d))
 
         return pose_pr
 
@@ -165,11 +170,24 @@ if __name__=="__main__":
     # args.output = "single_image/single_image_out11" # with crop
     # args.iters = 8
 
+    image_path = "single_image/example_images/ceshitu2.jpg"
+    args.output = "single_image/single_image_out11" # with crop
+    args.iters = 8
+
     image_path = "/home/junpeng.hu/Documents/ws_gen6d/Gen6D/single_image/example_images/ceshitu.png"
     args.output = "single_image/single_image_out12" # with crop
     args.iters = 8
+
+    # image_path = "single_image/example_images/5301152175403164561.jpg"
+    # args.output = "single_image/single_image_out13" # with crop
+    # args.iters = 8
+
+    image_path = "/home/junpeng.hu/Documents/ws_gen6d/Gen6D/single_image/example_images/ceshitu.png"
+    args.output = "single_image/single_image_out12gtpose2" # with crop gt pose
+    args.iters = 8
+    bbox = np.array([320,150,270,270])
     
     interface = EstimatorInterface(args.cfg, args.database, output_dir=args.output, transpose=args.transpose, iter=args.iters, image_size=args.image_size)
 
-    pose_pred = interface.predict(image_path) # 世界到相机pose，世界坐标系定义为interface.object_pts的世界坐标系
+    pose_pred = interface.predict(image_path,bbox=bbox) # 世界到相机pose，世界坐标系定义为interface.object_pts的世界坐标系
     print(pose_pred)

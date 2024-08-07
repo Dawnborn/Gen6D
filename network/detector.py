@@ -88,11 +88,11 @@ class BaseDetector(nn.Module):
         @return: qn
         """
         qn, rfn, hq, wq = scores.shape
-        select_id = torch.argmax(scores.flatten(1), 1)
-        select_ref_id = select_id // (hq * wq)
+        select_id = torch.argmax(scores.flatten(1), 1) # score 分数最大的像素
+        select_ref_id = select_id // (hq * wq) # 像素在hq*wq中的占比
         select_h_id = (select_id - select_ref_id * hq * wq) // wq
         select_w_id = select_id - select_ref_id * hq * wq - select_h_id * wq
-        return select_ref_id, select_w_id, select_h_id
+        return select_ref_id, select_w_id, select_h_id # score最大的点的横向和纵向的坐标
 
     @staticmethod
     def parse_detection(scores, scales, offsets, pool_ratio):
@@ -102,7 +102,8 @@ class BaseDetector(nn.Module):
         @param scales:    qn,1,h/8,w/8
         @param offsets:   qn,2,h/8,w/8
         @param pool_ratio:int
-        @return: position in x_cur
+        @return: position in x_cur 添加offset并还原到/8之前的坐标
+                 scale: 2**scale
         """
         qn, _, _, _ = offsets.shape
 
@@ -200,7 +201,7 @@ class Detector(BaseDetector):
         # resize to 120,120
         ref_imgs = F.interpolate(ref_imgs,size=(120,120))
         # 15, 7, 3
-        self.ref_center_feats = self.extract_feats(ref_imgs)
+        self.ref_center_feats = self.extract_feats(ref_imgs) # (torch.Size([32, 512, 15, 15]), torch.Size([32, 512, 7, 7]), torch.Size([32, 512, 3, 3]))
         rfn, _, h, w = ref_imgs.shape
         self.ref_shape = [h, w]
 
@@ -216,8 +217,8 @@ class Detector(BaseDetector):
         return scores0, scores1, scores2
 
     def get_scores(self, que_imgs):
-        que_x0, que_x1, que_x2 = self.extract_feats(que_imgs)
-        ref_x0, ref_x1, ref_x2 = self.ref_center_feats # rfn,f,hr,wr
+        que_x0, que_x1, que_x2 = self.extract_feats(que_imgs) # (torch.Size([1, 512, 24, 40]), torch.Size([1, 512, 12, 20]), torch.Size([1, 512, 6, 10]))
+        ref_x0, ref_x1, ref_x2 = self.ref_center_feats # rfn,f,hr,wr # (torch.Size([32, 512, 15, 15]), torch.Size([32, 512, 7, 7]), torch.Size([32, 512, 3, 3]))
 
         scores2 = F.conv2d(que_x2, ref_x2, padding=1)
         scores1 = F.conv2d(que_x1, ref_x1, padding=3)
@@ -234,25 +235,25 @@ class Detector(BaseDetector):
         hs, ws = hq // 8, wq // 8
         scores = []
         for scale in self.cfg['detection_scales']:
-            ht, wt = int(np.round(hq*2**scale)), int(np.round(wq*2**scale))
+            ht, wt = int(np.round(hq*2**scale)), int(np.round(wq*2**scale)) # 对que image进行不同尺寸的缩放
             if ht%32!=0: ht=(ht//32+1)*32
             if wt%32!=0: wt=(wt//32+1)*32
             que_imgs_cur = F.interpolate(que_imgs,size=(ht,wt),mode='bilinear')
-            scores_cur = self.get_scores(que_imgs_cur)
+            scores_cur = self.get_scores(que_imgs_cur) # 用ref feature作为核对que image进行卷积
             qn, _, rfn, hcs, wcs = scores_cur.shape
             scores.append(F.interpolate(scores_cur.reshape(qn,3*rfn,hcs,wcs),size=(hs,ws),mode='bilinear').reshape(qn,3,rfn,hs,ws))
 
         scores = torch.cat(scores, 1) # qn,sn*3,rfn,hq/8,wq/8 torch.Size([1, 12, 32, 120, 67])
         scores = self.score_conv(scores) # torch.Size([1, 64, 32, 120, 67])
-        scores_feats = torch.max(scores,2)[0] # qn,f,hq/8,wq/8
-        scores = self.score_predict(scores_feats) # qn,1,hq/8,wq/8
+        scores_feats = torch.max(scores,2)[0] # qn,f,ref,hq/8,wq/8 -> qn,f,hq/8,wq/8
+        scores = self.score_predict(scores_feats) # -> qn,1,hq/8,wq/8
 
         # predict offset and bbox
         _, select_w_id, select_h_id = self.get_select_index(scores)
         que_select_id = torch.stack([select_w_id, select_h_id],1) # qn, 2
 
-        select_offset = self.offset_predict(scores_feats)  # qn,1,hq/8,wq/8
-        select_scale = self.scale_predict(scores_feats) # qn,1,hq/8,wq/8
+        select_offset = self.offset_predict(scores_feats)  # qn,f,hq/8,wq/8 -> qn,2,hq/8,wq/8
+        select_scale = self.scale_predict(scores_feats) # qn,f,hq/8,wq/8 -> qn,1,hq/8,wq/8
         outputs = {'scores': scores, 'que_select_id': que_select_id, 'pool_ratio': self.pool_ratio, 'select_pr_offset': select_offset, 'select_pr_scale': select_scale,}
 
         # bboxes_pr = []
